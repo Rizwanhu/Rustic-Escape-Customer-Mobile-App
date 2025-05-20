@@ -1,20 +1,49 @@
 import 'package:flutter/material.dart';
-import 'guest_dashboard_screen.dart';
+import 'package:google_fonts/google_fonts.dart';
+import 'package:provider/provider.dart';
+import 'auth_service.dart';
+import 'auth_wrapper.dart';
+import 'main_navigation_screen.dart';
+import 'reservation_screen.dart';
 
 class GuestScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text('Guest Area')),
+      backgroundColor: Colors.grey[900],
+      appBar: AppBar(
+        title: Text(
+          'Guest Area',
+          style: GoogleFonts.josefinSans(
+            fontWeight: FontWeight.bold,
+            color: Colors.white,
+          ),
+        ),
+        backgroundColor: Colors.black,
+      ),
       body: Center(
         child: SingleChildScrollView(
           padding: EdgeInsets.all(20),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
+              if (ModalRoute.of(context)?.settings.name == 'guest')
+                Padding(
+                  padding: EdgeInsets.only(bottom: 20),
+                  child: Text(
+                    'You have been signed out',
+                    style: GoogleFonts.josefinSans(
+                      color: Colors.red[400],
+                      fontSize: 16,
+                    ),
+                  ),
+                ),
               Text(
                 'Sign in to access your guest area',
-                style: TextStyle(fontSize: 18),
+                style: GoogleFonts.josefinSans(
+                  fontSize: 18,
+                  color: Colors.white,
+                ),
               ),
               SizedBox(height: 30),
               _LoginForm(),
@@ -35,6 +64,7 @@ class _LoginFormState extends State<_LoginForm> {
   final _formKey = GlobalKey<FormState>();
   final _phoneController = TextEditingController();
   final _passwordController = TextEditingController();
+  bool _isLoading = false;
 
   @override
   void dispose() {
@@ -43,13 +73,40 @@ class _LoginFormState extends State<_LoginForm> {
     super.dispose();
   }
 
-  void _submitForm() {
+  void _submitForm() async {
     if (_formKey.currentState!.validate()) {
-      Navigator.pushAndRemoveUntil(
-        context,
-        MaterialPageRoute(builder: (_) => GuestDashboardScreen()),
-            (Route<dynamic> route) => false,
-      );
+      setState(() => _isLoading = true);
+      try {
+        final authService = Provider.of<AuthService>(context, listen: false);
+        await Future.delayed(Duration(seconds: 1));
+        authService.login();
+
+        final routeArgs = ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
+        final fromReservation = routeArgs?['fromReservation'] ?? false;
+        final cabinId = routeArgs?['cabinId'] ?? '';
+
+        if (fromReservation) {
+          Navigator.pop(context, true);
+          if (cabinId.isNotEmpty) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => ReservationScreen(cabinId: cabinId),
+                ),
+              );
+            });
+          }
+        } else {
+          Navigator.pushAndRemoveUntil(
+            context,
+            MaterialPageRoute(builder: (_) => MainNavigationScreen(initialIndex: 2)),
+                (route) => false,
+          );
+        }
+      } finally {
+        if (mounted) setState(() => _isLoading = false);
+      }
     }
   }
 
@@ -61,10 +118,20 @@ class _LoginFormState extends State<_LoginForm> {
         children: [
           TextFormField(
             controller: _phoneController,
+            style: GoogleFonts.josefinSans(color: Colors.white),
             decoration: InputDecoration(
               labelText: 'Phone Number',
-              prefixIcon: Icon(Icons.phone),
-              border: OutlineInputBorder(),
+              labelStyle: GoogleFonts.josefinSans(color: Colors.grey[400]),
+              prefixIcon: Icon(Icons.phone, color: Colors.grey[400]),
+              border: OutlineInputBorder(
+                borderSide: BorderSide(color: Colors.grey[700]!),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderSide: BorderSide(color: Colors.grey[700]!),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderSide: BorderSide(color: Colors.brown[400]!),
+              ),
             ),
             keyboardType: TextInputType.phone,
             validator: (value) {
@@ -77,10 +144,20 @@ class _LoginFormState extends State<_LoginForm> {
           SizedBox(height: 20),
           TextFormField(
             controller: _passwordController,
+            style: GoogleFonts.josefinSans(color: Colors.white),
             decoration: InputDecoration(
               labelText: 'Password',
-              prefixIcon: Icon(Icons.lock),
-              border: OutlineInputBorder(),
+              labelStyle: GoogleFonts.josefinSans(color: Colors.grey[400]),
+              prefixIcon: Icon(Icons.lock, color: Colors.grey[400]),
+              border: OutlineInputBorder(
+                borderSide: BorderSide(color: Colors.grey[700]!),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderSide: BorderSide(color: Colors.grey[700]!),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderSide: BorderSide(color: Colors.brown[400]!),
+              ),
             ),
             obscureText: true,
             validator: (value) {
@@ -95,11 +172,29 @@ class _LoginFormState extends State<_LoginForm> {
           ),
           SizedBox(height: 20),
           ElevatedButton(
-            onPressed: _submitForm,
-            child: Text('Sign In'),
+            onPressed: _isLoading ? null : _submitForm,
+            child: _isLoading
+                ? SizedBox(
+              width: 20,
+              height: 20,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: Colors.white,
+              ),
+            )
+                : Text(
+              'Sign In',
+              style: GoogleFonts.josefinSans(
+                fontWeight: FontWeight.bold,
+              ),
+            ),
             style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.brown,
+              backgroundColor: Colors.brown[700],
+              foregroundColor: Colors.purple[200],
               minimumSize: Size(double.infinity, 50),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
             ),
           ),
           SizedBox(height: 10),
@@ -110,7 +205,12 @@ class _LoginFormState extends State<_LoginForm> {
                 MaterialPageRoute(builder: (_) => SignUpScreen()),
               );
             },
-            child: Text('Create an account'),
+            child: Text(
+              'Create an account',
+              style: GoogleFonts.josefinSans(
+                color: Colors.brown[200],
+              ),
+            ),
           ),
           TextButton(
             onPressed: () {
@@ -119,7 +219,12 @@ class _LoginFormState extends State<_LoginForm> {
                 MaterialPageRoute(builder: (_) => ForgotPasswordScreen()),
               );
             },
-            child: Text('Forgot Password?'),
+            child: Text(
+              'Forgot Password?',
+              style: GoogleFonts.josefinSans(
+                color: Colors.brown[200],
+              ),
+            ),
           ),
         ],
       ),
@@ -127,7 +232,6 @@ class _LoginFormState extends State<_LoginForm> {
   }
 }
 
-// SignUpScreen converted to a StatefulWidget to manage controllers
 class SignUpScreen extends StatefulWidget {
   @override
   _SignUpScreenState createState() => _SignUpScreenState();
@@ -151,19 +255,32 @@ class _SignUpScreenState extends State<SignUpScreen> {
 
   void _register() {
     if (_formKey.currentState!.validate()) {
+      final authService = AuthWrapper.of(context);
+      authService.login();
       Navigator.pushAndRemoveUntil(
         context,
-        MaterialPageRoute(builder: (_) => GuestDashboardScreen()),
+        MaterialPageRoute(
+          builder: (_) => MainNavigationScreen(initialIndex: 2),
+        ),
             (Route<dynamic> route) => false,
       );
     }
   }
 
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text('Create Account')),
+      backgroundColor: Colors.grey[900],
+      appBar: AppBar(
+        title: Text(
+          'Create Account',
+          style: GoogleFonts.josefinSans(
+            fontWeight: FontWeight.bold,
+            color: Colors.white,
+          ),
+        ),
+        backgroundColor: Colors.black,
+      ),
       body: SingleChildScrollView(
         padding: EdgeInsets.all(20),
         child: Form(
@@ -172,10 +289,20 @@ class _SignUpScreenState extends State<SignUpScreen> {
             children: [
               TextFormField(
                 controller: _phoneController,
+                style: GoogleFonts.josefinSans(color: Colors.white),
                 decoration: InputDecoration(
                   labelText: 'Phone Number',
-                  prefixIcon: Icon(Icons.phone),
-                  border: OutlineInputBorder(),
+                  labelStyle: GoogleFonts.josefinSans(color: Colors.grey[400]),
+                  prefixIcon: Icon(Icons.phone, color: Colors.grey[400]),
+                  border: OutlineInputBorder(
+                    borderSide: BorderSide(color: Colors.grey[700]!),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderSide: BorderSide(color: Colors.grey[700]!),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderSide: BorderSide(color: Colors.brown[400]!),
+                  ),
                 ),
                 keyboardType: TextInputType.phone,
                 validator: (value) {
@@ -188,10 +315,20 @@ class _SignUpScreenState extends State<SignUpScreen> {
               SizedBox(height: 20),
               TextFormField(
                 controller: _passwordController,
+                style: GoogleFonts.josefinSans(color: Colors.white),
                 decoration: InputDecoration(
                   labelText: 'Password',
-                  prefixIcon: Icon(Icons.lock),
-                  border: OutlineInputBorder(),
+                  labelStyle: GoogleFonts.josefinSans(color: Colors.grey[400]),
+                  prefixIcon: Icon(Icons.lock, color: Colors.grey[400]),
+                  border: OutlineInputBorder(
+                    borderSide: BorderSide(color: Colors.grey[700]!),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderSide: BorderSide(color: Colors.grey[700]!),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderSide: BorderSide(color: Colors.brown[400]!),
+                  ),
                 ),
                 obscureText: true,
                 validator: (value) {
@@ -207,10 +344,20 @@ class _SignUpScreenState extends State<SignUpScreen> {
               SizedBox(height: 20),
               TextFormField(
                 controller: _confirmPasswordController,
+                style: GoogleFonts.josefinSans(color: Colors.white),
                 decoration: InputDecoration(
                   labelText: 'Confirm Password',
-                  prefixIcon: Icon(Icons.lock),
-                  border: OutlineInputBorder(),
+                  labelStyle: GoogleFonts.josefinSans(color: Colors.grey[400]),
+                  prefixIcon: Icon(Icons.lock, color: Colors.grey[400]),
+                  border: OutlineInputBorder(
+                    borderSide: BorderSide(color: Colors.grey[700]!),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderSide: BorderSide(color: Colors.grey[700]!),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderSide: BorderSide(color: Colors.brown[400]!),
+                  ),
                 ),
                 obscureText: true,
                 validator: (value) {
@@ -223,10 +370,20 @@ class _SignUpScreenState extends State<SignUpScreen> {
               SizedBox(height: 20),
               TextFormField(
                 controller: _dobController,
+                style: GoogleFonts.josefinSans(color: Colors.white),
                 decoration: InputDecoration(
                   labelText: 'Date of Birth',
-                  prefixIcon: Icon(Icons.calendar_today),
-                  border: OutlineInputBorder(),
+                  labelStyle: GoogleFonts.josefinSans(color: Colors.grey[400]),
+                  prefixIcon: Icon(Icons.calendar_today, color: Colors.grey[400]),
+                  border: OutlineInputBorder(
+                    borderSide: BorderSide(color: Colors.grey[700]!),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderSide: BorderSide(color: Colors.grey[700]!),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderSide: BorderSide(color: Colors.brown[400]!),
+                  ),
                 ),
                 readOnly: true,
                 onTap: () async {
@@ -251,10 +408,19 @@ class _SignUpScreenState extends State<SignUpScreen> {
               SizedBox(height: 30),
               ElevatedButton(
                 onPressed: _register,
-                child: Text('Register'),
+                child: Text(
+                  'Register',
+                  style: GoogleFonts.josefinSans(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.brown,
+                  backgroundColor: Colors.brown[700],
+                  foregroundColor: Colors.white,
                   minimumSize: Size(double.infinity, 50),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
                 ),
               ),
             ],
@@ -288,21 +454,32 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
 
   void _resetPassword() {
     if (_formKey.currentState!.validate()) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Resetting password...')),
+      final authService = AuthWrapper.of(context);
+      authService.login();
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(
+          builder: (_) => MainNavigationScreen(initialIndex: 2),
+        ),
+            (Route<dynamic> route) => false,
       );
-
-      // Replace this with actual password reset logic.
-      Future.delayed(Duration(milliseconds: 500), () {
-        Navigator.pop(context);
-      });
     }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text('Reset Password')),
+      backgroundColor: Colors.grey[900],
+      appBar: AppBar(
+        title: Text(
+          'Reset Password',
+          style: GoogleFonts.josefinSans(
+            fontWeight: FontWeight.bold,
+            color: Colors.white,
+          ),
+        ),
+        backgroundColor: Colors.black,
+      ),
       body: SingleChildScrollView(
         padding: EdgeInsets.all(20),
         child: Form(
@@ -311,10 +488,20 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
             children: [
               TextFormField(
                 controller: _phoneController,
+                style: GoogleFonts.josefinSans(color: Colors.white),
                 decoration: InputDecoration(
                   labelText: 'Phone Number',
-                  prefixIcon: Icon(Icons.phone),
-                  border: OutlineInputBorder(),
+                  labelStyle: GoogleFonts.josefinSans(color: Colors.grey[400]),
+                  prefixIcon: Icon(Icons.phone, color: Colors.grey[400]),
+                  border: OutlineInputBorder(
+                    borderSide: BorderSide(color: Colors.grey[700]!),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderSide: BorderSide(color: Colors.grey[700]!),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderSide: BorderSide(color: Colors.brown[400]!),
+                  ),
                 ),
                 keyboardType: TextInputType.phone,
                 validator: (value) {
@@ -327,10 +514,20 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
               SizedBox(height: 20),
               TextFormField(
                 controller: _dobController,
+                style: GoogleFonts.josefinSans(color: Colors.white),
                 decoration: InputDecoration(
                   labelText: 'Date of Birth',
-                  prefixIcon: Icon(Icons.calendar_today),
-                  border: OutlineInputBorder(),
+                  labelStyle: GoogleFonts.josefinSans(color: Colors.grey[400]),
+                  prefixIcon: Icon(Icons.calendar_today, color: Colors.grey[400]),
+                  border: OutlineInputBorder(
+                    borderSide: BorderSide(color: Colors.grey[700]!),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderSide: BorderSide(color: Colors.grey[700]!),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderSide: BorderSide(color: Colors.brown[400]!),
+                  ),
                 ),
                 readOnly: true,
                 onTap: () async {
@@ -355,10 +552,20 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
               SizedBox(height: 20),
               TextFormField(
                 controller: _newPasswordController,
+                style: GoogleFonts.josefinSans(color: Colors.white),
                 decoration: InputDecoration(
                   labelText: 'New Password',
-                  prefixIcon: Icon(Icons.lock),
-                  border: OutlineInputBorder(),
+                  labelStyle: GoogleFonts.josefinSans(color: Colors.grey[400]),
+                  prefixIcon: Icon(Icons.lock, color: Colors.grey[400]),
+                  border: OutlineInputBorder(
+                    borderSide: BorderSide(color: Colors.grey[700]!),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderSide: BorderSide(color: Colors.grey[700]!),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderSide: BorderSide(color: Colors.brown[400]!),
+                  ),
                 ),
                 obscureText: true,
                 validator: (value) {
@@ -374,10 +581,20 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
               SizedBox(height: 20),
               TextFormField(
                 controller: _confirmPasswordController,
+                style: GoogleFonts.josefinSans(color: Colors.white),
                 decoration: InputDecoration(
                   labelText: 'Confirm New Password',
-                  prefixIcon: Icon(Icons.lock),
-                  border: OutlineInputBorder(),
+                  labelStyle: GoogleFonts.josefinSans(color: Colors.grey[400]),
+                  prefixIcon: Icon(Icons.lock, color: Colors.grey[400]),
+                  border: OutlineInputBorder(
+                    borderSide: BorderSide(color: Colors.grey[700]!),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderSide: BorderSide(color: Colors.grey[700]!),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderSide: BorderSide(color: Colors.brown[400]!),
+                  ),
                 ),
                 obscureText: true,
                 validator: (value) {
@@ -390,10 +607,19 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
               SizedBox(height: 30),
               ElevatedButton(
                 onPressed: _resetPassword,
-                child: Text('Reset Password'),
+                child: Text(
+                  'Reset Password',
+                  style: GoogleFonts.josefinSans(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.brown,
+                  backgroundColor: Colors.brown[700],
+                  foregroundColor: Colors.white,
                   minimumSize: Size(double.infinity, 50),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
                 ),
               ),
             ],

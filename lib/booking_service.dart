@@ -1,26 +1,80 @@
-// booking_service.dart
+// booking_screen.dart
+
 import 'package:flutter/material.dart';
 import 'booking_model.dart';
+import 'supabase_service.dart';
 
 class BookingService extends ChangeNotifier {
+  final SupabaseService supabaseService;
   List<Booking> _bookings = [];
 
-  List<Booking> get upcomingBookings =>
-      _bookings.where((b) => b.status == 'confirmed').toList();
+  BookingService({required this.supabaseService});
 
-  List<Booking> get pastBookings =>
-      _bookings.where((b) => b.status == 'completed').toList();
+  Future<void> loadUserBookings(String userId) async {
+    try {
+      final data = await supabaseService.getUserBookings(userId);
+      print('[BOOKING SERVICE] Raw booking data: $data');
 
-  void addBooking(Booking booking) {
-    _bookings.add(booking);
-    notifyListeners(); // Notify about the change
-  }
+      _bookings = data.map<Booking>((json) {
+        return Booking.fromJson({
+          'id': json['id'],
+          'cabinId': json['cabinId'],
+          'startDate': json['startDate'],
+          'endDate': json['endDate'],
+          'numGuests': json['numGuests'],
+          'cabinPrice': json['cabinPrice'],
+          'status': json['status'],
+        });
+      }).toList();
 
-  void cancelBooking(String id) {
-    final index = _bookings.indexWhere((b) => b.id == id);
-    if (index != -1) {
-      _bookings[index] = _bookings[index].copyWith(status: 'cancelled');
-      notifyListeners(); // Notify about the change
+      notifyListeners();
+    } catch (e) {
+      print('[BOOKING SERVICE] Error loading bookings: $e');
+      rethrow;
     }
   }
+
+  Future<void> addBooking(Booking booking) async {
+    try {
+      print('[BOOKING SERVICE] Adding booking: ${booking.toJson()}');
+      await supabaseService.createBooking(booking.toJson());
+      _bookings.add(booking);
+      notifyListeners();
+    } catch (e) {
+      print('[BOOKING SERVICE] Error adding booking: $e');
+      rethrow;
+    }
+  }
+
+  Future<void> cancelBooking(String id) async {
+    try {
+      print('[BOOKING SERVICE] Cancelling booking: $id');
+      await supabaseService.cancelBooking(id);
+      final index = _bookings.indexWhere((b) => b.id == id);
+      if (index != -1) {
+        _bookings[index] = _bookings[index].copyWith(status: 'cancelled');
+        notifyListeners();
+      }
+    } catch (e) {
+      print('[BOOKING SERVICE] Error cancelling booking: $e');
+      rethrow;
+    }
+  }
+
+  List<Booking> get upcomingBookings {
+    final now = DateTime.now();
+    return _bookings.where((booking) =>
+    booking.endDate.isAfter(now) &&
+        booking.status.toLowerCase() == 'confirmed'
+    ).toList();
+  }
+
+  List<Booking> get pastBookings {
+    final now = DateTime.now();
+    return _bookings.where((booking) =>
+    booking.endDate.isBefore(now) &&
+        booking.status.toLowerCase() == 'confirmed'
+    ).toList();
+  }
+
 }

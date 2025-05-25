@@ -1,29 +1,52 @@
 // booking_model.dart
+
 class Booking {
-  final String id;
-  final String cabinId;
-  final String cabinName;
+  final String? id;
+  final int cabinId;
   final DateTime fromDate;
-  final DateTime toDate;
+  final DateTime endDate;
   final int guestCount;
-  final double pricePerNight;
+  final double cabinPrice;
   final String status;
 
   Booking({
-    required this.id,
+    this.id,
     required this.cabinId,
-    required this.cabinName,
     required this.fromDate,
-    required this.toDate,
+    required this.endDate,
     required this.guestCount,
-    this.pricePerNight = 250, // Default price per night
-    this.status = 'confirmed',
+    required this.cabinPrice,
+    required this.status,
   });
 
-  // Add a computed property for total price
+  factory Booking.fromJson(Map<String, dynamic> json) {
+    return Booking(
+      id: json['id']?.toString(),
+      cabinId: int.tryParse(json['cabinId'].toString()) ?? 0,
+      fromDate: DateTime.parse(json['startDate']),
+      endDate: DateTime.parse(json['endDate']),
+      guestCount: json['numGuests'],
+      cabinPrice: (json['cabinPrice'] as num).toDouble(),
+      status: json['status'],
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    final data = {
+      if (id != null) 'id': id,
+      'cabinId': cabinId,
+      'startDate': fromDate.toIso8601String(),
+      'endDate': endDate.toIso8601String(),
+      'numGuests': guestCount,
+      'cabinPrice': cabinPrice,
+      'status': status,
+    };
+    return data;
+  }
+
   double get totalPrice {
-    final nights = toDate.difference(fromDate).inDays;
-    return nights * pricePerNight;
+    final nights = endDate.difference(fromDate).inDays;
+    return nights * cabinPrice;
   }
 
   Booking copyWith({
@@ -38,12 +61,11 @@ class Booking {
   }) {
     return Booking(
       id: id ?? this.id,
-      cabinId: cabinId ?? this.cabinId,
-      cabinName: cabinName ?? this.cabinName,
+      cabinId: (cabinId ?? this.cabinId) as int,
       fromDate: fromDate ?? this.fromDate,
-      toDate: toDate ?? this.toDate,
+      endDate: toDate ?? this.endDate,
       guestCount: guestCount ?? this.guestCount,
-      pricePerNight: pricePerNight ?? this.pricePerNight,
+      cabinPrice: pricePerNight ?? this.cabinPrice,
       status: status ?? this.status,
     );
   }

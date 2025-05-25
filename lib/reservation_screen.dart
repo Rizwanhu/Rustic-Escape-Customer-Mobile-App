@@ -1,3 +1,4 @@
+// reservation_screen.dart
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
@@ -5,381 +6,236 @@ import 'auth_service.dart';
 import 'booking_model.dart';
 import 'booking_service.dart';
 import 'main_navigation_screen.dart';
+import 'supabase_service.dart';
+import 'cabin_model.dart';
 
 class ReservationScreen extends StatefulWidget {
   final String cabinId;
-  const ReservationScreen({required this.cabinId, Key? key}) : super(key: key);
+  final int maxCapacity;
+
+  const ReservationScreen({
+    required this.cabinId,
+    required this.maxCapacity,
+    Key? key,
+  }) : super(key: key);
 
   @override
   _ReservationScreenState createState() => _ReservationScreenState();
 }
 
 class _ReservationScreenState extends State<ReservationScreen> {
-  final double _pricePerNight = 250;
   DateTime? _selectedFromDate;
   DateTime? _selectedToDate;
   int _guestCount = 1;
   String _specialRequests = '';
+  Cabin? selectedCabin;
+  bool isLoading = true;
 
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      final authService = Provider.of<AuthService>(context, listen: false);
-      if (!authService.isLoggedIn) {
-        Navigator.pushAndRemoveUntil(
-          context,
-          MaterialPageRoute(
-            builder: (context) => MainNavigationScreen(
-              initialIndex: 2,
-            ),
-            settings: RouteSettings(arguments: {
-              'fromReservation': true,
-              'cabinId': widget.cabinId,
-            }),
-          ),
-              (route) => false,
-        );
-      }
-    });
+    _checkAuthAndLoadCabin();
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final totalNights = _selectedFromDate != null && _selectedToDate != null
-        ? _selectedToDate!.difference(_selectedFromDate!).inDays
-        : 0;
-    final totalPrice = totalNights * _pricePerNight;
+  Future<void> _checkAuthAndLoadCabin() async {
+    final authService = Provider.of<AuthService>(context, listen: false);
+    if (!authService.isLoggedIn) {
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(builder: (context) => MainNavigationScreen()),
+            (route) => false,
+      );
+      return;
+    }
 
-    return Scaffold(
-      backgroundColor: Colors.grey[900],
-      appBar: AppBar(
-        title: Text(
-          'Reserve Cabin',
-          style: GoogleFonts.josefinSans(
-            fontWeight: FontWeight.bold,
-            color: Colors.white,
-          ),
-        ),
-        backgroundColor: Colors.black,
-      ),
-      body: SingleChildScrollView(
-        padding: EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Reserve OOI today. Pay on arrival',
-              style: GoogleFonts.josefinSans(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-                color: Colors.white,
-              ),
-            ),
-            SizedBox(height: 20),
-            _buildLoginInfo(),
-            SizedBox(height: 20),
-            _buildDateRangeSelector(context),
-            SizedBox(height: 20),
-            _buildGuestSelector(),
-            SizedBox(height: 20),
-            _buildSpecialRequests(),
-            SizedBox(height: 30),
-            _buildReservationSummary(totalNights, totalPrice),
-          ],
-        ),
-      ),
-    );
+    final supabaseService = Provider.of<BookingService>(context, listen: false).supabaseService;
+    try {
+      final cabin = await supabaseService.getCabinById(widget.cabinId);
+      setState(() {
+        selectedCabin = cabin;
+        isLoading = false;
+      });
+    } catch (e) {
+      print('[ERROR] Failed to load cabin: $e');
+      setState(() => isLoading = false);
+    }
   }
 
-  Widget _buildLoginInfo() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          'Login',
-          style: GoogleFonts.josefinSans(
-            fontWeight: FontWeight.bold,
-            color: Colors.white,
-          ),
-        ),
-        SizedBox(height: 10),
-        Text(
-          'Logged in as',
-          style: GoogleFonts.josefinSans(color: Colors.grey[400]),
-        ),
-        Text(
-          'Anonymous',
-          style: GoogleFonts.josefinSans(
-            fontWeight: FontWeight.bold,
-            color: Colors.white,
-          ),
-        ),
-      ],
-    );
+  int get _numberOfNights {
+    if (_selectedFromDate != null && _selectedToDate != null) {
+      return _selectedToDate!.difference(_selectedFromDate!).inDays;
+    }
+    return 0;
   }
 
-  Widget _buildDateRangeSelector(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          'Select Dates',
-          style: GoogleFonts.josefinSans(
-            fontWeight: FontWeight.bold,
-            color: Colors.white,
-          ),
-        ),
-        SizedBox(height: 10),
-        Row(
-          children: [
-            Expanded(
-              child: ElevatedButton(
-                onPressed: () => _pickDate(context, true),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.grey[800],
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                ),
-                child: Text(
-                  _selectedFromDate == null
-                      ? 'From'
-                      : 'From: ${_formatDate(_selectedFromDate!)}',
-                  style: GoogleFonts.josefinSans(),
-                ),
-              ),
-            ),
-            SizedBox(width: 10),
-            Expanded(
-              child: ElevatedButton(
-                onPressed: _selectedFromDate != null
-                    ? () => _pickDate(context, false)
-                    : null,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.grey[800],
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                ),
-                child: Text(
-                  _selectedToDate == null
-                      ? 'To'
-                      : 'To: ${_formatDate(_selectedToDate!)}',
-                  style: GoogleFonts.josefinSans(),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ],
-    );
-  }
+  double get _totalPrice => _numberOfNights * (selectedCabin?.regularPrice ?? 0);
 
-  Future<void> _pickDate(BuildContext context, bool isStartDate) async {
-    final initialDate = isStartDate ? DateTime.now() : _selectedFromDate!.add(Duration(days: 1));
-    final firstDate = isStartDate ? DateTime.now() : _selectedFromDate!.add(Duration(days: 1));
-    final DateTime? pickedDate = await showDatePicker(
+  Future<void> _pickDateRange(BuildContext context, bool isFrom) async {
+    DateTime initialDate = isFrom
+        ? (_selectedFromDate ?? DateTime.now())
+        : (_selectedToDate ?? DateTime.now().add(const Duration(days: 1)));
+
+    final DateTime? picked = await showDatePicker(
       context: context,
       initialDate: initialDate,
-      firstDate: firstDate,
-      lastDate: DateTime.now().add(Duration(days: 365)),
-      builder: (context, child) {
-        return Theme(
-          data: ThemeData.dark().copyWith(
-            colorScheme: ColorScheme.dark(
-              primary: Colors.white,
-              onPrimary: Colors.white,
-              surface: Colors.grey[800]!,
-              onSurface: Colors.white,
-            ),
-            dialogBackgroundColor: Colors.grey[900],
-          ),
-          child: child!,
-        );
-      },
+      firstDate: DateTime.now(),
+      lastDate: DateTime(2100),
     );
 
-    if (pickedDate != null) {
+    if (picked != null) {
       setState(() {
-        if (isStartDate) {
-          _selectedFromDate = pickedDate;
-          _selectedToDate = null;
+        if (isFrom) {
+          _selectedFromDate = picked;
+          if (_selectedToDate != null && _selectedToDate!.isBefore(picked)) {
+            _selectedToDate = null;
+          }
         } else {
-          _selectedToDate = pickedDate;
+          if (_selectedFromDate != null && picked.isAfter(_selectedFromDate!)) {
+            _selectedToDate = picked;
+          }
         }
       });
     }
   }
 
-  String _formatDate(DateTime date) {
-    return "${date.month}/${date.day}/${date.year}";
+  Future<void> _reserveCabin() async {
+    if (selectedCabin == null) return;
+
+    final bookingService = Provider.of<BookingService>(context, listen: false);
+    final supabaseService = bookingService.supabaseService;
+    final userId = supabaseService.auth.currentUser?.id ?? '';
+
+    try {
+      final cabinId = int.tryParse(selectedCabin!.id.toString()) ?? 0;
+      if (cabinId == 0) {
+        throw Exception('Invalid cabin ID');
+      }
+
+      final totalPrice = _numberOfNights * selectedCabin!.regularPrice;
+
+      final booking = Booking(
+        cabinId: cabinId,
+        fromDate: _selectedFromDate!,
+        endDate: _selectedToDate!,
+        guestCount: _guestCount,
+        cabinPrice: totalPrice, // ✅ Store total price here
+        status: 'confirmed',
+      );
+
+      await bookingService.addBooking(booking);
+      if (userId.isNotEmpty) {
+        await bookingService.loadUserBookings(userId);
+      }
+      Navigator.pop(context, true);
+    } catch (e) {
+      print('[ERROR] Booking failed: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Booking failed: ${e.toString()}')),
+      );
+    }
   }
 
-  Widget _buildGuestSelector() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          'How many guests?',
-          style: GoogleFonts.josefinSans(
-            fontWeight: FontWeight.bold,
-            color: Colors.white,
-          ),
-        ),
-        SizedBox(height: 10),
-        Container(
-          padding: EdgeInsets.symmetric(horizontal: 12),
-          decoration: BoxDecoration(
-            color: Colors.grey[800],
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: Colors.grey[700]!),
-          ),
-          child: DropdownButton<int>(
-            value: _guestCount,
-            dropdownColor: Colors.grey[800],
-            style: GoogleFonts.josefinSans(color: Colors.white),
-            underline: SizedBox(),
-            isExpanded: true,
-            items: List.generate(8, (i) => i + 1)
-                .map((value) => DropdownMenuItem<int>(
-              value: value,
-              child: Text(
-                '$value guest${value > 1 ? "s" : ""}',
-                style: GoogleFonts.josefinSans(),
+  @override
+  Widget build(BuildContext context) {
+    if (isLoading) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    if (selectedCabin == null) {
+      return const Scaffold(
+        body: Center(child: Text('Failed to load cabin details.', style: TextStyle(color: Colors.white))),
+      );
+    }
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Reserve Cabin', style: TextStyle(color: Colors.white)),
+        backgroundColor: Colors.black,
+      ),
+      body: Padding(
+        padding: const EdgeInsets.all(20.0),
+        child: ListView(
+          children: [
+            const Text("Select your dates:", style: TextStyle(fontSize: 18, color: Colors.white)),
+            Row(
+              children: [
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: () => _pickDateRange(context, true),
+                    child: Text(
+                      _selectedFromDate == null
+                          ? 'From Date'
+                          : 'From: ${_selectedFromDate!.toLocal()}'.split(' ')[0],
+                      style: TextStyle(color: Colors.white),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: _selectedFromDate == null
+                        ? null
+                        : () => _pickDateRange(context, false),
+                    child: Text(
+                      _selectedToDate == null
+                          ? 'To Date'
+                          : 'To: ${_selectedToDate!.toLocal()}'.split(' ')[0],
+                      style: TextStyle(color: Colors.white),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 20),
+            const Text("How many guests?", style: TextStyle(fontSize: 18, color: Colors.white)),
+            DropdownButton<int>(
+              value: _guestCount,
+              items: List.generate(widget.maxCapacity, (i) => i + 1)
+                  .map((count) => DropdownMenuItem(
+                value: count,
+                child: Text('$count guest${count > 1 ? 's' : ''}', style: TextStyle(color: Colors.white)),
+              ))
+                  .toList(),
+              onChanged: (value) {
+                if (value != null) {
+                  setState(() => _guestCount = value);
+                }
+              },
+            ),
+            const SizedBox(height: 20),
+            const Text("Special Requests:", style: TextStyle(fontSize: 18, color: Colors.white)),
+            TextField(
+              maxLines: 3,
+              onChanged: (value) => _specialRequests = value,
+              decoration: const InputDecoration(
+                hintText: 'Enter any special requests...',
+                hintStyle: TextStyle(color: Colors.white70),
+                border: OutlineInputBorder(),
               ),
-            ))
-                .toList(),
-            onChanged: (value) => setState(() => _guestCount = value!),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildSpecialRequests() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          'Anything we should know about your stay?',
-          style: GoogleFonts.josefinSans(
-            fontWeight: FontWeight.bold,
-            color: Colors.white,
-          ),
-        ),
-        SizedBox(height: 10),
-        Text(
-          'Any pets, allergies, special requirements, etc.?',
-          style: GoogleFonts.josefinSans(color: Colors.grey[400]),
-        ),
-        SizedBox(height: 10),
-        TextField(
-          maxLines: 3,
-          style: GoogleFonts.josefinSans(color: Colors.white),
-          decoration: InputDecoration(
-            filled: true,
-            fillColor: Colors.grey[800],
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(8),
-              borderSide: BorderSide(color: Colors.grey[700]!),
+              style: TextStyle(color: Colors.white),
             ),
-            enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(8),
-              borderSide: BorderSide(color: Colors.grey[700]!),
-            ),
-            focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(8),
-              borderSide: BorderSide(color: Colors.brown[400]!),
-            ),
-            hintText: 'Enter your special requests...',
-            hintStyle: GoogleFonts.josefinSans(color: Colors.grey[500]),
-          ),
-          onChanged: (value) => setState(() => _specialRequests = value),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildReservationSummary(int totalNights, double totalPrice) {
-    return Column(
-      children: [
-        Container(
-          padding: EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: Colors.grey[800],
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
+            const SizedBox(height: 20),
+            if (_numberOfNights > 0)
               Text(
-                '\$$_pricePerNight / night',
-                style: GoogleFonts.josefinSans(color: Colors.white),
+                'Total Price for $_numberOfNights night(s): \$$_totalPrice',
+                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white),
               ),
-              if (totalNights > 0)
-                Text(
-                  '$totalNights night${totalNights > 1 ? "s" : ""}',
-                  style: GoogleFonts.josefinSans(color: Colors.white),
-                ),
-              Text(
-                'TOTAL: \$${totalPrice.toStringAsFixed(2)}',
-                style: GoogleFonts.josefinSans(
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white,
-                ),
-              ),
-            ],
-          ),
-        ),
-        SizedBox(height: 20),
-        ElevatedButton(
-          onPressed: _selectedFromDate != null && _selectedToDate != null
-              ? () async {
-            final bookingService = Provider.of<BookingService>(context, listen: false);
-            final booking = Booking(
-              id: DateTime.now().millisecondsSinceEpoch.toString(),
-              cabinId: widget.cabinId,
-              cabinName: 'Cabin ${widget.cabinId}',
-              fromDate: _selectedFromDate!,
-              toDate: _selectedToDate!,
-              guestCount: _guestCount,
-            );
-
-            bookingService.addBooking(booking);
-
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(
-                  'Reservation submitted successfully!',
-                  style: GoogleFonts.josefinSans(),
-                ),
-                backgroundColor: Colors.grey[700],
-              ),
-            );
-
-            Navigator.pop(context);
-          }
-              : null,
-          child: Text(
-            'Reserve Now',
-            style: GoogleFonts.josefinSans(
-              fontWeight: FontWeight.bold,
+            const SizedBox(height: 30),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.amber),
+              onPressed: _selectedFromDate != null &&
+                  _selectedToDate != null &&
+                  _selectedToDate!.isAfter(_selectedFromDate!)
+                  ? _reserveCabin
+                  : null,
+              child: const Text('Reserve Now', style: TextStyle(color: Colors.black)),
             ),
-          ),
-          style: ElevatedButton.styleFrom(
-            minimumSize: Size(double.infinity, 50),
-            backgroundColor: Colors.brown[700],
-            foregroundColor: Colors.white,
-            disabledBackgroundColor: Colors.grey[800],
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(8),
-            ),
-          ),
+          ],
         ),
-      ],
+      ),
+      backgroundColor: Colors.black,
     );
   }
 }

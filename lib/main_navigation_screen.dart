@@ -1,14 +1,16 @@
 // main_navigation_screen.dart
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:seproject/reservation_screen.dart';
 import 'auth_service.dart';
 import 'booking_service.dart';
 import 'home_screen.dart';
 import 'about_screen.dart';
 import 'guest_screen.dart';
 import 'guest_dashboard_screen.dart';
+import 'reservation_screen.dart';
 import 'auth_wrapper.dart';
+import 'guest_screen.dart' as guest;
+import 'reservation_screen.dart' as reservation;
 
 class MainNavigationScreen extends StatefulWidget {
   final int initialIndex;
@@ -36,13 +38,16 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     final routeArgs = ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
     final fromReservation = routeArgs?['fromReservation'] ?? false;
     final cabinId = routeArgs?['cabinId'] ?? '';
+    final maxCapacity = routeArgs?['maxCapacity'] ?? 1; // Default to 1 to avoid crash
+
 
     final List<Widget> _screens = [
       HomeScreen(),
       AboutScreen(),
       authService.isLoggedIn
           ? GuestDashboardScreen()
-          : GuestScreen(),
+          : guest.GuestScreen()
+      ,
     ];
 
     void _onItemTapped(int index) {
@@ -55,7 +60,10 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
           Navigator.push(
             context,
             MaterialPageRoute(
-              builder: (context) => ReservationScreen(cabinId: cabinId),
+              builder: (context) => ReservationScreen(
+                cabinId: cabinId,
+                maxCapacity: maxCapacity,
+              ),
             ),
           );
         });

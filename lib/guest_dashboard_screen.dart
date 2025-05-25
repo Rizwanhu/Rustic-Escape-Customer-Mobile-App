@@ -1,15 +1,43 @@
+//guest_dashboard_screen.dart
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
+import 'ChangePasswordScreen.dart';
+import 'PersonalInformationScreen.dart';
 import 'account_settings_screens.dart';
+import 'auth_service.dart';
 import 'auth_wrapper.dart';
 import 'booking_model.dart';
 import 'booking_service.dart';
 import 'main_navigation_screen.dart';
 
-class GuestDashboardScreen extends StatelessWidget {
+class GuestDashboardScreen extends StatefulWidget {
+  @override
+  _GuestDashboardScreenState createState() => _GuestDashboardScreenState();
+}
+
+class _GuestDashboardScreenState extends State<GuestDashboardScreen> {
+  late BookingService bookingService;
+  late String userId;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadBookings();
+  }
+
+  Future<void> _loadBookings() async {
+    final bookingService = Provider.of<BookingService>(context, listen: false);
+    final userId = bookingService.supabaseService.auth.currentUser?.id ?? '';
+    if (userId.isNotEmpty) {
+      await bookingService.loadUserBookings(userId);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final authService = Provider.of<AuthService>(context);
+    final userId = authService.supabaseService.auth.currentUser?.id ?? '';
     return Scaffold(
       backgroundColor: Colors.grey[900],
       appBar: AppBar(
@@ -23,27 +51,29 @@ class GuestDashboardScreen extends StatelessWidget {
         backgroundColor: Colors.black,
         actions: [
           IconButton(
-            icon: Icon(Icons.logout, color: Colors.white),
-            onPressed: () {
-              final authService = AuthWrapper.of(context);
-              authService.logout();
-              Navigator.pushAndRemoveUntil(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => MainNavigationScreen(initialIndex: 2),
-                  settings: RouteSettings(name: 'guest'),
-                ),
-                    (Route<dynamic> route) => false,
-              );
-            },
+              icon: Icon(Icons.logout, color: Colors.white),
+              onPressed: () async {
+                final authService = AuthWrapper.of(context);
+                await authService.logout();
+                Navigator.pushAndRemoveUntil(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => MainNavigationScreen(initialIndex: 2),
+                    settings: RouteSettings(name: 'guest'),
+                  ),
+                      (Route<dynamic> route) => false,
+                );
+              }
           ),
         ],
       ),
       body: Consumer<BookingService>(
         builder: (context, bookingService, child) {
-          return SingleChildScrollView(
-            padding: EdgeInsets.all(16),
-            child: Column(
+          return RefreshIndicator(
+              onRefresh: () => bookingService.loadUserBookings(userId),
+          child: SingleChildScrollView(
+          padding: EdgeInsets.all(16),
+          child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 _buildWelcomeHeader(),
@@ -55,7 +85,7 @@ class GuestDashboardScreen extends StatelessWidget {
                 _buildAccountSettings(context),
               ],
             ),
-          );
+          ));
         },
       ),
     );
@@ -99,13 +129,7 @@ class GuestDashboardScreen extends StatelessWidget {
             color: Colors.white,
           ),
         ),
-        SizedBox(height: 12),
-        if (upcomingBookings.isEmpty)
-          Text(
-            'No upcoming bookings',
-            style: GoogleFonts.josefinSans(color: Colors.grey[400]),
-          ),
-        ...upcomingBookings.map((booking) => Card(
+        ...upcomingBookings.map((b) => Card(
           color: Colors.grey[800],
           elevation: 2,
           child: Padding(
@@ -115,11 +139,11 @@ class GuestDashboardScreen extends StatelessWidget {
                 ListTile(
                   leading: Icon(Icons.home_work, color: Colors.brown[400]),
                   title: Text(
-                    booking.cabinName,
+                    'Cabin ID: ${b.cabinId}',
                     style: GoogleFonts.josefinSans(color: Colors.white),
                   ),
                   subtitle: Text(
-                    '${_formatDate(booking.fromDate)} - ${_formatDate(booking.toDate)}',
+                    '${_formatDate(b.fromDate)} → ${_formatDate(b.endDate)}',
                     style: GoogleFonts.josefinSans(color: Colors.grey[400]),
                   ),
                   trailing: Chip(
@@ -135,7 +159,7 @@ class GuestDashboardScreen extends StatelessWidget {
                   mainAxisAlignment: MainAxisAlignment.end,
                   children: [
                     TextButton(
-                      onPressed: () => _showBookingDetails(context, booking),
+                      onPressed: () => _showBookingDetails(context, b),
                       child: Text(
                         'VIEW DETAILS',
                         style: GoogleFonts.josefinSans(color: Colors.brown[200]),
@@ -143,7 +167,7 @@ class GuestDashboardScreen extends StatelessWidget {
                     ),
                     SizedBox(width: 8),
                     TextButton(
-                      onPressed: () => _showCancelConfirmation(context, bookingService, booking.id),
+                      onPressed: () => _showCancelConfirmation(context, bookingService, b.id!),
                       child: Text(
                         'CANCEL',
                         style: GoogleFonts.josefinSans(color: Colors.red[400]),
@@ -155,6 +179,11 @@ class GuestDashboardScreen extends StatelessWidget {
             ),
           ),
         )).toList(),
+        if (upcomingBookings.isEmpty)
+          Text(
+            'No upcoming bookings',
+            style: GoogleFonts.josefinSans(color: Colors.grey[400]),
+          ),
       ],
     );
   }
@@ -188,12 +217,8 @@ class GuestDashboardScreen extends StatelessWidget {
               children: [
                 ListTile(
                   leading: Icon(Icons.home_work, color: Colors.brown[400]),
-                  title: Text(
-                    booking.cabinName,
-                    style: GoogleFonts.josefinSans(color: Colors.white),
-                  ),
                   subtitle: Text(
-                    '${_formatDate(booking.fromDate)} - ${_formatDate(booking.toDate)}',
+                    '${_formatDate(booking.fromDate)} - ${_formatDate(booking.endDate)}',
                     style: GoogleFonts.josefinSans(color: Colors.grey[400]),
                   ),
                   trailing: Chip(
@@ -258,19 +283,12 @@ class GuestDashboardScreen extends StatelessWidget {
                   style: GoogleFonts.josefinSans(color: Colors.white),
                 ),
                 trailing: Icon(Icons.chevron_right, color: Colors.white),
-                onTap: () => showPersonalInfoScreen(context),
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => PersonalInformationScreen()),
+                ),
               ),
               Divider(height: 0, color: Colors.grey[700]),
-              ListTile(
-                leading: Icon(Icons.phone, color: Colors.brown[400]),
-                title: Text(
-                  'Phone Number',
-                  style: GoogleFonts.josefinSans(color: Colors.white),
-                ),
-                trailing: Icon(Icons.chevron_right, color: Colors.white),
-                onTap: () => showPhoneNumberScreen(context),
-              ),
-              Divider(height: 0, color: Colors.grey[700]), // Changed to white divider
               ListTile(
                 leading: Icon(Icons.lock, color: Colors.brown[400]),
                 title: Text(
@@ -278,17 +296,10 @@ class GuestDashboardScreen extends StatelessWidget {
                   style: GoogleFonts.josefinSans(color: Colors.white),
                 ),
                 trailing: Icon(Icons.chevron_right, color: Colors.white),
-                onTap: () => showChangePasswordScreen(context),
-              ),
-              Divider(height: 0, color: Colors.grey[700]),
-              ListTile(
-                leading: Icon(Icons.notifications, color: Colors.brown[400]),
-                title: Text(
-                  'Notification Preferences',
-                  style: GoogleFonts.josefinSans(color: Colors.white),
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => ChangePasswordScreen()),
                 ),
-                trailing: Icon(Icons.chevron_right, color: Colors.white),
-                onTap: () => showNotificationPreferencesScreen(context),
               ),
             ],
           ),
@@ -315,21 +326,13 @@ class GuestDashboardScreen extends StatelessWidget {
                 borderRadius: BorderRadius.circular(8),
                 child: Image.asset('assets/cabin.jpg', height: 150, fit: BoxFit.cover),
               ),
-              SizedBox(height: 16),
-              Text(
-                booking.cabinName,
-                style: GoogleFonts.josefinSans(
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white,
-                ),
-              ),
               SizedBox(height: 8),
               Text(
-                '${_formatDate(booking.fromDate)} - ${_formatDate(booking.toDate)}',
+                '${_formatDate(booking.fromDate)} - ${_formatDate(booking.endDate)}',
                 style: GoogleFonts.josefinSans(color: Colors.grey[400]),
               ),
               Text(
-                '${booking.toDate.difference(booking.fromDate).inDays} night${booking.toDate.difference(booking.fromDate).inDays > 1 ? 's' : ''}',
+                '${booking.endDate.difference(booking.fromDate).inDays} night${booking.endDate.difference(booking.fromDate).inDays > 1 ? 's' : ''}',
                 style: GoogleFonts.josefinSans(color: Colors.grey[400]),
               ),
               SizedBox(height: 8),
